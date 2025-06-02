@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Chess AI | IMMA BEAT YO ASS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1><i class="fas fa-chess"></i> Deep Chess AI</h1>
+        <p class="subtitle">Play against the AI powered by Deep Seek R1</p>
+    </header>
+    
+    <div class="game-container">
+        <div class="board-section">
+            <div class="board-container">
+                <div id="board"></div>
+            </div>
+            
+            <div class="player-info">
+                <div class="player-card user">
+                    <div class="player-icon">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="player-details">
+                        <div class="player-name">You (White)</div>
+                        <div class="player-stats">
+                            <span><i class="fas fa-chess-king"></i> Rating: 1200</span>
+                            <span><i class="fas fa-clock"></i><i id="white-time">Time: 10:00</i></span>
+                        </div>
+                        <div class="captured-pieces" id="user-captured">
+                            <!-- Captured pieces will appear here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="player-card ai">
+                    <div class="player-icon">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="player-details">
+                        <div class="player-name">DeepChess AI (Black)</div>
+                        <div class="player-stats">
+                            <span><i class="fas fa-chess-king"></i> Rating: 2100</span>
+                            <span><i class="fas fa-clock" ></i> <i id="black-time">Time: 10:00</i></span>
+                        </div>
+                        <div class="captured-pieces" id="ai-captured">
+                            <!-- Captured pieces will appear here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn new-game" id="new-game-btn">
+                    <i class="fas fa-plus-circle"></i> New Game
+                </button>
+                <button class="btn" id="undo-btn">
+                    <i class="fas fa-undo"></i> Undo Move
+                </button>
+                <button class="btn hint" id="hint-btn">
+                    <i class="fas fa-lightbulb"></i> Show Hint
+                </button>
+                <button class="btn" id="toggle-ai-btn">
+                    <i class="fas fa-brain"></i> <span id="ai-mode-text">Deep AI</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="log-section">
+            <div class="moves-container">
+                <h2 class="section-title"><i class="fas fa-list-ol"></i> Move Log</h2>
+                <div class="moves-log" id="moves-log">
+                    <!-- Move log will be generated dynamically -->
+                </div>
+            </div>
+            
+            <div class="tools-container">
+                <h2 class="section-title"><i class="fas fa-tools"></i> Board Tools</h2>
+                <div class="tools">
+                    <div class="tool-row">
+                        <div class="tool-btn active" id="move-tool">
+                            <i class="fas fa-arrow-pointer tool-icon"></i>
+                            <span class="tool-label">Move</span>
+                        </div>
+                        <div class="tool-btn" id="arrow-tool">
+                            <i class="fas fa-arrow-up tool-icon"></i>
+                            <span class="tool-label">Draw Arrow</span>
+                        </div>
+                        <div class="tool-btn" id="mark-tool">
+                            <i class="fas fa-square tool-icon"></i>
+                            <span class="tool-label">Mark Square</span>
+                        </div>
+                    </div>
+                    <div class="tool-row">
+                        <div class="tool-btn" id="premove-tool">
+                            <i class="fas fa-fast-forward tool-icon"></i>
+                            <span class="tool-label">Premove</span>
+                        </div>
+                        <div class="tool-btn" id="clear-tool">
+                            <i class="fas fa-eraser tool-icon"></i>
+                            <span class="tool-label">Clear Marks</span>
+                        </div>
+                        <div class="tool-btn" id="analyze-tool">
+                            <i class="fas fa-search tool-icon"></i>
+                            <span class="tool-label">Analyze</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="status-container">
+                <h2 class="section-title"><i class="fas fa-info-circle"></i> Game Status</h2>
+                <div class="status-bar" id="status-bar">
+                    <span>Your turn. Make a move!</span>
+                </div>
+                <div class="api-status" id="api-status">
+                    <i class="fas fa-circle-check"></i> AI Engine: Deep Seek API
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://js.puter.com/v2/"></script>
+    <script src="script.js"></script>
+</body>
+</html>
