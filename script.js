@@ -626,91 +626,576 @@
                 movePiece(randomMove.from, randomMove.to);
             }
 
+            // Grandmaster-level AI implementation
+            function makeAIMove() {
+                if (gameOver) return;
+                
+                // Use iterative deepening with a time limit
+                const startTime = Date.now();
+                const timeLimit = 5000; // 5 seconds for AI to think
+                let bestMove = null;
+                let depth = 1;
+                
+                while (Date.now() - startTime < timeLimit && depth <= 5) {
+                    const result = minimax(boardState, depth, -Infinity, Infinity, 'black');
+                    if (result.move) {
+                        bestMove = result.move;
+                    }
+                    depth++;
+                }
+                
+                if (bestMove) {
+                    movePiece(bestMove.from, bestMove.to);
+                } else {
+                    // Fallback to simpler AI if no move found
+                    console.log("Using fallback AI");
+                    makeBasicAIMove();
+                }
+            }
 
-                // Optimized AI move function
-                function makeAIMove() {
-                    console.log("Local bot is being used");
-                    if (gameOver) return;
+            // Minimax with alpha-beta pruning
+            function minimax(state, depth, alpha, beta, player) {
+                if (depth === 0 || isTerminalState(state)) {
+                    return { score: evaluatePosition(state) };
+                }
 
-                    // Start with simple checks that can return quickly
-                    const quickChecks = [
-                        checkForCaptureOpportunities,
-                        checkForCheckOpportunities,
-                        checkForPawnPromotions
-                    ];
+                const moves = generateAllMoves(state, player);
+                let bestScore = player === 'black' ? -Infinity : Infinity;
+                let bestMove = moves[0];
 
-                    // Try quick checks first
-                    for (const check of quickChecks) {
-                        const move = check();
-                        if (move) {
-                            setTimeout(() => movePiece(move.from, move.to), 300); // Small delay for UX
-                            return;
+                for (const move of moves) {
+                    const newState = simulateMove(state, move);
+                    const result = minimax(newState, depth - 1, alpha, beta, player === 'black' ? 'white' : 'black');
+                    const score = result.score;
+
+                    if (player === 'black') {
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMove = move;
+                            alpha = Math.max(alpha, bestScore);
+                        }
+                    } else {
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestMove = move;
+                            beta = Math.min(beta, bestScore);
                         }
                     }
 
-                    // If no quick moves found, proceed with normal move selection
-                    setTimeout(() => {
-                        // Find all possible moves for all AI pieces
-                        const allMoves = [];
-                        const pieces = Object.entries(boardState)
-                            .filter(([_, piece]) => piece.color === 'black')
-                            .sort((a, b) => {
-                                // Sort by piece value (queen first, pawns last)
-                                const pieceValues = {
-                                    '♛': 9, '♜': 5, '♝': 3, '♞': 3, '♟': 1, '♚': 0
-                                };
-                                return pieceValues[b[1].piece] - pieceValues[a[1].piece];
-                            });
+                    if (beta <= alpha) {
+                        break; // Alpha-beta pruning
+                    }
+                }
 
-                        // Limit to top 5 most valuable pieces to consider
-                        for (const [pos, piece] of pieces.slice(0, 5)) {
-                            const moves = calculatePossibleMoves(piece.piece, 'black', pos);
-                            moves.forEach(move => {
-                                allMoves.push({
+                return { move: bestMove, score: bestScore };
+            }
+
+            // Quiescence search to avoid horizon effect
+            function quiescenceSearch(state, alpha, beta, player) {
+                const standPat = evaluatePosition(state);
+                if (standPat >= beta) return beta;
+                if (alpha < standPat) alpha = standPat;
+
+                const captures = generateCaptures(state, player);
+                for (const move of captures) {
+                    const newState = simulateMove(state, move);
+                    const score = -quiescenceSearch(newState, -beta, -alpha, player === 'black' ? 'white' : 'black');
+                    
+                    if (score >= beta) return beta;
+                    if (score > alpha) alpha = score;
+                }
+                
+                return alpha;
+            }
+
+            // Generate all possible captures
+            function generateCaptures(state, player) {
+                const captures = [];
+                for (const [pos, piece] of Object.entries(state)) {
+                    if (piece.color === player) {
+                        const moves = calculatePossibleMoves(piece.piece, piece.color, pos);
+                        for (const move of moves) {
+                            if (move.isCapture) {
+                                captures.push({
                                     from: pos,
                                     to: move.position,
-                                    isCapture: move.isCapture,
                                     piece: piece.piece
                                 });
-                            });
-
-                            // If we already have enough moves, break early
-                            if (allMoves.length > 10) break;
-                        }
-
-                        if (allMoves.length === 0) {
-                            // Stalemate or checkmate
-                            if (checkState.black) {
-                                gameOver = true;
-                                showGameOver('white');
-                            } else {
-                                gameOver = true;
-                                showGameOver('draw');
                             }
-                            return;
                         }
-
-                        // Prioritize captures and checks
-                        const captures = allMoves.filter(move => move.isCapture);
-                        const checks = allMoves.filter(move => {
-                            // Simulate move to see if it puts opponent in check
-                            const originalState = {...boardState};
-                            boardState[move.to] = {piece: move.piece, color: 'black'};
-                            delete boardState[move.from];
-                            const isCheck = isPositionAttacked(whiteKingPos, 'black');
-                            boardState = originalState;
-                            return isCheck;
-                        });
-
-                        // Prefer captures and checks
-                        const preferredMoves = [...checks, ...captures];
-                        const movePool = preferredMoves.length > 0 ? preferredMoves : allMoves;
-
-                        // Select a random move from the preferred pool
-                        const randomMove = movePool[Math.floor(Math.random() * movePool.length)];
-                        movePiece(randomMove.from, randomMove.to);
-                    }, 100); // Small delay for better UX
+                    }
                 }
+                return captures;
+            }
+
+            // Comprehensive position evaluation
+            function evaluatePosition(state) {
+                let score = 0;
+                
+                // Material balance
+                for (const [pos, piece] of Object.entries(state)) {
+                    const value = getPieceValue(piece.piece);
+                    score += piece.color === 'black' ? value : -value;
+                    
+                    // Positional value
+                    const positional = getPositionalValue(piece.piece, pos, piece.color);
+                    score += piece.color === 'black' ? positional : -positional;
+                }
+                
+                // Additional evaluation factors
+                score += evaluatePawnStructure(state);
+                score += evaluateKingSafety(state);
+                score += evaluateMobility(state);
+                score += evaluateCenterControl(state);
+                
+                return score;
+            }
+
+            // Piece values (centipawns)
+            function getPieceValue(piece) {
+                const values = {
+                    '♟': 100, '♞': 320, '♝': 330, '♜': 500, '♛': 900, '♚': 20000,
+                    '♙': 100, '♘': 320, '♗': 330, '♖': 500, '♕': 900, '♔': 20000
+                };
+                return values[piece] || 0;
+            }
+
+            // Piece-square tables for positional evaluation
+            function getPositionalValue(piece, position, color) {
+                const [file, rank] = position.split('');
+                const row = parseInt(rank);
+                const col = file.charCodeAt(0) - 'a'.charCodeAt(0);
+                const isBlack = color === 'black';
+                
+                // Adjust row for black pieces (flip the board)
+                const adjRow = isBlack ? 9 - row : row - 1;
+                const adjCol = isBlack ? 7 - col : col;
+                
+                const tables = {
+                    '♙': [
+                        [ 0,  0,  0,  0,  0,  0,  0,  0],
+                        [50, 50, 50, 50, 50, 50, 50, 50],
+                        [10, 10, 20, 30, 30, 20, 10, 10],
+                        [ 5,  5, 10, 25, 25, 10,  5,  5],
+                        [ 0,  0,  0, 20, 20,  0,  0,  0],
+                        [ 5, -5,-10,  0,  0,-10, -5,  5],
+                        [ 5, 10, 10,-20,-20, 10, 10,  5],
+                        [ 0,  0,  0,  0,  0,  0,  0,  0]
+                    ],
+                    '♘': [
+                        [-50,-40,-30,-30,-30,-30,-40,-50],
+                        [-40,-20,  0,  0,  0,  0,-20,-40],
+                        [-30,  0, 10, 15, 15, 10,  0,-30],
+                        [-30,  5, 15, 20, 20, 15,  5,-30],
+                        [-30,  0, 15, 20, 20, 15,  0,-30],
+                        [-30,  5, 10, 15, 15, 10,  5,-30],
+                        [-40,-20,  0,  5,  5,  0,-20,-40],
+                        [-50,-40,-30,-30,-30,-30,-40,-50]
+                    ],
+                    '♗': [
+                        [-20,-10,-10,-10,-10,-10,-10,-20],
+                        [-10,  0,  0,  0,  0,  0,  0,-10],
+                        [-10,  0,  5, 10, 10,  5,  0,-10],
+                        [-10,  5,  5, 10, 10,  5,  5,-10],
+                        [-10,  0, 10, 10, 10, 10,  0,-10],
+                        [-10, 10, 10, 10, 10, 10, 10,-10],
+                        [-10,  5,  0,  0,  0,  0,  5,-10],
+                        [-20,-10,-10,-10,-10,-10,-10,-20]
+                    ],
+                    '♜': [
+                        [ 0,  0,  0,  0,  0,  0,  0,  0],
+                        [ 5, 10, 10, 10, 10, 10, 10,  5],
+                        [-5,  0,  0,  0,  0,  0,  0, -5],
+                        [-5,  0,  0,  0,  0,  0,  0, -5],
+                        [-5,  0,  0,  0,  0,  0,  0, -5],
+                        [-5,  0,  0,  0,  0,  0,  0, -5],
+                        [-5,  0,  0,  0,  0,  0,  0, -5],
+                        [ 0,  0,  0,  5,  5,  0,  0,  0]
+                    ],
+                    '♛': [
+                        [-20,-10,-10, -5, -5,-10,-10,-20],
+                        [-10,  0,  0,  0,  0,  0,  0,-10],
+                        [-10,  0,  5,  5,  5,  5,  0,-10],
+                        [ -5,  0,  5,  5,  5,  5,  0, -5],
+                        [  0,  0,  5,  5,  5,  5,  0, -5],
+                        [-10,  5,  5,  5,  5,  5,  0,-10],
+                        [-10,  0,  5,  0,  0,  0,  0,-10],
+                        [-20,-10,-10, -5, -5,-10,-10,-20]
+                    ],
+                    '♚': [
+                        [ 30, 40, 40, 50, 50, 40, 40, 30],
+                        [ 30, 40, 40, 50, 50, 40, 40, 30],
+                        [ 30, 40, 40, 50, 50, 40, 40, 30],
+                        [ 30, 40, 40, 50, 50, 40, 40, 30],
+                        [ 20, 30, 30, 40, 40, 30, 30, 20],
+                        [ 10, 20, 20, 20, 20, 20, 20, 10],
+                        [  0, 10, 10, 10, 10, 10, 10,  0],
+                        [-20,  0, 10, 20, 20, 10,  0,-20]
+                    ]
+                };
+                
+                const pieceType = piece === '♟' ? '♙' : piece; // Normalize black pieces
+                const table = tables[pieceType];
+                if (!table) return 0;
+                
+                return table[adjRow][adjCol];
+            }
+
+            // Evaluate pawn structure
+            function evaluatePawnStructure(state) {
+                let score = 0;
+                const pawns = {
+                    white: [],
+                    black: []
+                };
+                
+                // Collect pawn positions
+                for (const [pos, piece] of Object.entries(state)) {
+                    if (piece.piece === '♙' || piece.piece === '♟') {
+                        const [file, rank] = pos.split('');
+                        pawns[piece.color].push({ file, rank: parseInt(rank) });
+                    }
+                }
+                
+                // Evaluate pawn features
+                score += evaluatePawnFeatures(pawns.white, 'white');
+                score -= evaluatePawnFeatures(pawns.black, 'black');
+                
+                return score;
+            }
+
+            function evaluatePawnFeatures(pawns, color) {
+                let score = 0;
+                const files = { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, g: 0, h: 0 };
+                
+                // Count pawns per file
+                pawns.forEach(pawn => {
+                    files[pawn.file]++;
+                });
+                
+                // Evaluate pawn structure
+                pawns.forEach(pawn => {
+                    const { file, rank } = pawn;
+                    
+                    // Doubled pawns penalty
+                    if (files[file] > 1) score -= 10;
+                    
+                    // Isolated pawns penalty
+                    const adjacentFiles = [
+                        String.fromCharCode(file.charCodeAt(0) - 1),
+                        String.fromCharCode(file.charCodeAt(0) + 1)
+                    ].filter(f => f >= 'a' && f <= 'h');
+                    
+                    if (adjacentFiles.every(f => files[f] === 0)) {
+                        score -= 20;
+                    }
+                    
+                    // Passed pawn bonus
+                    const opponentPawns = pawns.filter(p => 
+                        p.color !== color && 
+                        Math.abs(p.file.charCodeAt(0) - file.charCodeAt(0)) <= 1
+                    );
+                    
+                    if (opponentPawns.length === 0) {
+                        const promotionDistance = color === 'white' ? 8 - rank : rank - 1;
+                        score += 30 + (20 - promotionDistance * 5);
+                    }
+                });
+                
+                return score;
+            }
+
+            // Evaluate king safety
+            function evaluateKingSafety(state) {
+                let score = 0;
+                const kingPositions = {
+                    white: null,
+                    black: null
+                };
+                
+                // Find kings
+                for (const [pos, piece] of Object.entries(state)) {
+                    if (piece.piece === '♔') kingPositions.white = pos;
+                    if (piece.piece === '♚') kingPositions.black = pos;
+                }
+                
+                // Evaluate safety for each king
+                if (kingPositions.white) {
+                    score -= evaluateKingShield(state, kingPositions.white, 'white');
+                }
+                if (kingPositions.black) {
+                    score += evaluateKingShield(state, kingPositions.black, 'black');
+                }
+                
+                return score;
+            }
+
+            function evaluateKingShield(state, kingPos, color) {
+                let safety = 0;
+                const [file, rank] = kingPos.split('');
+                const kingRank = parseInt(rank);
+                const kingFileIndex = file.charCodeAt(0) - 'a'.charCodeAt(0);
+                
+                // Check pawn shield
+                const pawnShieldFiles = [
+                    kingFileIndex - 1,
+                    kingFileIndex,
+                    kingFileIndex + 1
+                ].filter(i => i >= 0 && i < 8);
+                
+                const pawnShieldRank = color === 'white' ? kingRank - 1 : kingRank + 1;
+                const pawnShieldRank2 = color === 'white' ? kingRank - 2 : kingRank + 2;
+                
+                pawnShieldFiles.forEach(fileIndex => {
+                    const fileChar = String.fromCharCode('a'.charCodeAt(0) + fileIndex);
+                    const shieldPos = `${fileChar}${pawnShieldRank}`;
+                    const shieldPos2 = `${fileChar}${pawnShieldRank2}`;
+                    
+                    if (state[shieldPos] && state[shieldPos].piece === (color === 'white' ? '♙' : '♟')) {
+                        safety += 15;
+                    }
+                    if (state[shieldPos2] && state[shieldPos2].piece === (color === 'white' ? '♙' : '♟')) {
+                        safety += 10;
+                    }
+                });
+                
+                // Check open files near king
+                const openFiles = pawnShieldFiles.filter(fileIndex => {
+                    const fileChar = String.fromCharCode('a'.charCodeAt(0) + fileIndex);
+                    for (let r = 1; r <= 8; r++) {
+                        const pos = `${fileChar}${r}`;
+                        if (state[pos] && state[pos].piece === (color === 'white' ? '♙' : '♟')) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+                
+                safety -= openFiles.length * 20;
+                
+                return safety;
+            }
+
+            // Evaluate piece mobility
+            function evaluateMobility(state) {
+                let whiteMobility = 0;
+                let blackMobility = 0;
+                
+                for (const [pos, piece] of Object.entries(state)) {
+                    const moves = calculatePossibleMoves(piece.piece, piece.color, pos);
+                    if (piece.color === 'white') {
+                        whiteMobility += moves.length;
+                    } else {
+                        blackMobility += moves.length;
+                    }
+                }
+                
+                return (blackMobility - whiteMobility) * 0.5;
+            }
+
+            // Evaluate center control
+            function evaluateCenterControl(state) {
+                const centerSquares = ['d4', 'd5', 'e4', 'e5'];
+                let whiteControl = 0;
+                let blackControl = 0;
+                
+                for (const [pos, piece] of Object.entries(state)) {
+                    const moves = calculatePossibleMoves(piece.piece, piece.color, pos);
+                    const centerAttacks = moves.filter(move => centerSquares.includes(move.position));
+                    
+                    if (piece.color === 'white') {
+                        whiteControl += centerAttacks.length;
+                    } else {
+                        blackControl += centerAttacks.length;
+                    }
+                }
+                
+                return (blackControl - whiteControl) * 0.8;
+            }
+
+            // Check if terminal state (checkmate or stalemate)
+            function isTerminalState(state) {
+                const whiteMoves = generateAllMoves(state, 'white');
+                const blackMoves = generateAllMoves(state, 'black');
+                
+                if (whiteMoves.length === 0) {
+                    return isKingInCheck(state, 'white') ? 'whiteCheckmate' : 'whiteStalemate';
+                }
+                
+                if (blackMoves.length === 0) {
+                    return isKingInCheck(state, 'black') ? 'blackCheckmate' : 'blackStalemate';
+                }
+                
+                return false;
+            }
+
+            // Generate all moves for a player
+            function generateAllMoves(state, player) {
+                const moves = [];
+                for (const [pos, piece] of Object.entries(state)) {
+                    if (piece.color === player) {
+                        const pieceMoves = calculatePossibleMoves(piece.piece, piece.color, pos);
+                        for (const move of pieceMoves) {
+                            moves.push({
+                                from: pos,
+                                to: move.position,
+                                piece: piece.piece
+                            });
+                        }
+                    }
+                }
+                return moves;
+            }
+
+            // Simulate a move on the board state
+            function simulateMove(state, move) {
+                const newState = JSON.parse(JSON.stringify(state));
+                const movingPiece = newState[move.from];
+                
+                // Move the piece
+                newState[move.to] = movingPiece;
+                delete newState[move.from];
+                
+                // Handle captures
+                if (state[move.to]) {
+                    delete newState[move.to];
+                }
+                
+                return newState;
+            }
+
+            // Check if king is in check
+            function isKingInCheck(state, color) {
+                let kingPos = null;
+                const opponent = color === 'white' ? 'black' : 'white';
+                
+                // Find the king
+                for (const [pos, piece] of Object.entries(state)) {
+                    if (piece.color === color && 
+                        (piece.piece === '♔' || piece.piece === '♚')) {
+                        kingPos = pos;
+                        break;
+                    }
+                }
+                
+                if (!kingPos) return false;
+                
+                // Check if any opponent piece can attack the king
+                for (const [pos, piece] of Object.entries(state)) {
+                    if (piece.color === opponent) {
+                        const moves = calculatePossibleMoves(piece.piece, piece.color, pos);
+                        if (moves.some(move => move.position === kingPos)) {
+                            return true;
+                        }
+                    }
+                }
+                
+                return false;
+            }
+
+            // Fallback AI for when minimax doesn't find a move
+            function makeBasicAIMove() {
+                // Enhanced quick checks
+                const quickMove = 
+                    findForcingMove() || 
+                    findMaterialGainMove() || 
+                    findPositionalImprovementMove();
+                
+                if (quickMove) {
+                    movePiece(quickMove.from, quickMove.to);
+                    return;
+                }
+                
+                // If no quick move found, pick a random move
+                const moves = generateAllMoves(boardState, 'black');
+                if (moves.length > 0) {
+                    const randomMove = moves[Math.floor(Math.random() * moves.length)];
+                    movePiece(randomMove.from, randomMove.to);
+                }
+            }
+
+            // Find forcing moves (checks, captures, threats)
+            function findForcingMove() {
+                const moves = generateAllMoves(boardState, 'black');
+                
+                // Look for checkmate opportunities
+                for (const move of moves) {
+                    const newState = simulateMove(boardState, move);
+                    if (isTerminalState(newState) === 'whiteCheckmate') {
+                        return move;
+                    }
+                }
+                
+                // Look for checks
+                for (const move of moves) {
+                    const newState = simulateMove(boardState, move);
+                    if (isKingInCheck(newState, 'white')) {
+                        return move;
+                    }
+                }
+                
+                // Look for captures
+                const captures = moves.filter(move => boardState[move.to]);
+                if (captures.length > 0) {
+                    // Find the highest value capture
+                    captures.sort((a, b) => {
+                        const aValue = getPieceValue(boardState[a.to].piece);
+                        const bValue = getPieceValue(boardState[b.to].piece);
+                        return bValue - aValue;
+                    });
+                    return captures[0];
+                }
+                
+                return null;
+            }
+
+            // Find material gain moves
+            function findMaterialGainMove() {
+                const moves = generateAllMoves(boardState, 'black');
+                let bestMove = null;
+                let bestScore = -Infinity;
+                
+                for (const move of moves) {
+                    const newState = simulateMove(boardState, move);
+                    const score = evaluatePosition(newState);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                }
+                
+                return bestMove;
+            }
+
+            // Find positional improvement moves
+            function findPositionalImprovementMove() {
+                const moves = generateAllMoves(boardState, 'black');
+                const positionalMoves = [];
+                
+                for (const move of moves) {
+                    const fromValue = getPositionalValue(move.piece, move.from, 'black');
+                    const toValue = getPositionalValue(move.piece, move.to, 'black');
+                    
+                    if (toValue > fromValue + 10) {
+                        positionalMoves.push(move);
+                    }
+                }
+                
+                if (positionalMoves.length > 0) {
+                    // Pick the move with the biggest positional improvement
+                    positionalMoves.sort((a, b) => {
+                        const aImprove = getPositionalValue(a.piece, a.to, 'black') - 
+                                        getPositionalValue(a.piece, a.from, 'black');
+                        const bImprove = getPositionalValue(b.piece, b.to, 'black') - 
+                                        getPositionalValue(b.piece, b.from, 'black');
+                        return bImprove - aImprove;
+                    });
+                    return positionalMoves[0];
+                }
+                
+                return null;
+            }
+
 
                 // Helper functions for quick checks
                 function checkForCaptureOpportunities() {
